@@ -62,7 +62,23 @@ function WalletApp() {
 
   useEffect(() => {
     const handleNetworkSwitchAndFetch = async () => {
-      const provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+      let provider = null;
+      
+      // Ensure provider initialization on mobile
+      if (typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
+        provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+      } else {
+        // Handle mobile browser (delayed initialization)
+        const providerCheck = setInterval(() => {
+          if (window.ethereum) {
+            provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+            clearInterval(providerCheck);
+          }
+        }, 1000);
+
+        setTimeout(() => clearInterval(providerCheck), 10000); // Timeout after 10s if no provider is found
+      }
+
       try {
         if (address && provider) {
           setLoading(true);
@@ -80,12 +96,7 @@ function WalletApp() {
       }
     };
 
-    if (window.ethereum) {
-      handleNetworkSwitchAndFetch();
-    } else {
-      // Handle missing provider on mobile, e.g., Safari
-      setError("Ethereum provider is not available. Please open MetaMask or another wallet.");
-    }
+    handleNetworkSwitchAndFetch();
   }, [address]);
 
   const fetchBalances = async (provider) => {
