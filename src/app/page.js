@@ -9,7 +9,7 @@ import { appConfig } from '../config';
 const queryClient = new QueryClient();
 
 export default function HomePage() {
-  alert (appConfig.envCheck)
+  
   return (
     <QueryClientProvider client={queryClient}>
       <ThirdwebProvider activeChain={appConfig.network} supportedChains={[appConfig.network]} clientId={appConfig.thirdWebClientId}>
@@ -70,6 +70,7 @@ function WalletApp() {
           setError(`Error: ${err.message}`);
         } finally {
           setLoading(false);
+          alert (appConfig.envCheck)
         }
       }
     };
