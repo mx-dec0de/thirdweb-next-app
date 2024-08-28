@@ -69,32 +69,48 @@ function WalletApp() {
   const disconnect = useDisconnect();
   const [loading, setLoading] = useState(true);
 
+  const getWalletConnectProvider = async () => {
+    try {
+      const WalletConnectProvider = (await import('@walletconnect/web3-provider')).default;
+      const provider = new WalletConnectProvider({
+        rpc: { [appConfig.chainId]: appConfig.network.rpcUrls[0] },
+        projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID, // Ensure the project ID is set
+      });
+
+      await provider.enable(); // This triggers the WalletConnect connection
+      return new ethers.providers.Web3Provider(provider);
+    } catch (error) {
+      console.error("WalletConnect initialization failed:", error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     const handleNetworkSwitchAndFetch = async () => {
-      let provider;
+      let provider = null;
 
-      if (typeof window.ethereum !== 'undefined') {
-        provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
-      } else {
-        try {
+      // Retry mechanism for WalletConnect provider initialization
+      for (let retries = 0; retries < 3; retries++) {
+        if (typeof window.ethereum !== 'undefined') {
+          provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+          break;
+        } else {
           provider = await getWalletConnectProvider();
-          if (!provider) {
-            setError("No provider found. Please connect your wallet.");
-            return;
-          }
-        } catch (err) {
-          setError("Failed to initialize WalletConnect. Please try again.");
-          return;
+          if (provider) break; // Stop retrying if provider is found
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
         }
       }
 
-      if (provider) {
+      if (!provider) {
+        setError("No provider found. Please connect your wallet.");
+        return;
+      }
+
+      if (address) {
+        setLoading(true);
         try {
-          if (address) {
-            setLoading(true);
-            await switchToNetwork(provider); // Ensure correct network
-            await fetchBalances(provider);   // Fetch balances using the provider
-          }
+          await switchToNetwork(provider); // Ensure correct network
+          await fetchBalances(provider);   // Fetch balances using the provider
         } catch (err) {
           console.error("Error during network switch or balance fetching:", err);
           setError(`Error: ${err.message}`);
@@ -111,7 +127,6 @@ function WalletApp() {
         window.location.reload();
       });
     }
-
   }, [address]);
 
   const fetchBalances = async (provider) => {
@@ -134,20 +149,6 @@ function WalletApp() {
     } catch (err) {
       console.error("Error fetching balances:", err);
       setError(`Error fetching balances: ${err.message}`);
-    }
-  };
-
-  const getWalletConnectProvider = async () => {
-    try {
-      const WalletConnectProvider = (await import('@walletconnect/web3-provider')).default;
-      const provider = new WalletConnectProvider({
-        rpc: { [appConfig.chainId]: appConfig.network.rpcUrls[0] },
-      });
-      await provider.enable();  // Trigger WalletConnect
-      return new ethers.providers.Web3Provider(provider);
-    } catch (error) {
-      console.error("WalletConnect initialization failed:", error);
-      return null;
     }
   };
 
