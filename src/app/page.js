@@ -5,15 +5,23 @@ import { ThirdwebProvider, ConnectWallet, useAddress, useDisconnect } from "@thi
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { ethers } from 'ethers';
 import { appConfig } from '../config';
+import DialogComponent from '../DialogComponent'; // Import the dialog component
 
 const queryClient = new QueryClient();
 
 export default function HomePage() {
-  
+ 
+
   return (
     <QueryClientProvider client={queryClient}>
-      <ThirdwebProvider activeChain={appConfig.network} supportedChains={[appConfig.network]} clientId={appConfig.thirdWebClientId}>
+      <ThirdwebProvider 
+        activeChain={appConfig.network} 
+        supportedChains={[appConfig.network]} 
+        clientId={appConfig.thirdWebClientId}>
+        
         <WalletApp />
+        <DialogComponent /> {/* Include the DialogComponent */}
+        
       </ThirdwebProvider>
     </QueryClientProvider>
   ); 
@@ -70,7 +78,7 @@ function WalletApp() {
           setError(`Error: ${err.message}`);
         } finally {
           setLoading(false);
-          alert (appConfig.envCheck)
+          alert(appConfig.envCheck);
         }
       }
     };
