@@ -1,3 +1,59 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { ThirdwebProvider, ConnectWallet, useAddress, useDisconnect } from "@thirdweb-dev/react";
+import { QueryClient, QueryClientProvider } from 'react-query';
+import { ethers } from 'ethers';
+import { appConfig } from '../config';
+import DialogComponent from '../DialogComponent'; // Import the dialog component
+
+const queryClient = new QueryClient();
+
+export default function HomePage() {
+ 
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThirdwebProvider 
+        activeChain={appConfig.network} 
+        supportedChains={[appConfig.network]} 
+        clientId={appConfig.thirdWebClientId}>
+        
+        <WalletApp />
+        
+      </ThirdwebProvider>
+    </QueryClientProvider>
+  ); 
+}
+
+async function switchToNetwork() {
+  try {
+    if (typeof window.ethereum !== 'undefined') {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: appConfig.chainIdHexCode }],
+      });
+      console.log("Switched to " + appConfig.network.chainName);
+    } else {
+      throw new Error("Ethereum provider not found");
+    }
+  } catch (switchError) {
+    if (switchError.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [appConfig.network],
+        });
+        console.log(appConfig.network.chainName + " added and switched");
+      } catch (addError) {
+        console.error("Failed to add the network", addError);
+      }
+    } else {
+      console.error("Failed to switch the network", switchError);
+    }
+  }
+}
+
 function WalletApp() {
   const [gasBalance, setGasBalance] = useState(null);
   const [uoaBalance, setUoaBalance] = useState(null);
@@ -5,63 +61,66 @@ function WalletApp() {
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amountToSend, setAmountToSend] = useState('');
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [networkPrompt, setNetworkPrompt] = useState(false);
   const address = useAddress();
   const disconnect = useDisconnect();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const handleNetworkSwitchAndFetch = async () => {
-      let provider;
-      let signer;
-
-      if (typeof window.ethereum !== 'undefined') {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = provider.getSigner();
-      }
-
-      if (!provider || !signer) {
-        setError("Ethereum provider not found. Please connect your wallet.");
-        return;
-      }
-
-      try {
-        if (address) {
+      if (address) {
+        try {
           setLoading(true);
-
-          // Check if the user is on the wrong network
-          const network = await provider.getNetwork();
-          if (network.chainId !== parseInt(appConfig.network.chainIdHexCode, 16)) {
-            setNetworkPrompt(true);  // Show network switch prompt to the user
-            setLoading(false);        // Stop loading while waiting for user action
-            return;
-          }
-
-          await fetchBalances(signer); // Fetch balances using signer
+          await switchToNetwork();
+          await fetchBalances();
+        } catch (err) {
+          console.error("Error during network switch or balance fetching:", err);
+          setError(`Error: ${err.message}`);
+        } finally {
+          setLoading(false);
         }
-      } catch (err) {
-        console.error("Error during network switch or balance fetching:", err);
-        setError(`Error: ${err.message}`);
-      } finally {
-        setLoading(false);
       }
     };
 
     handleNetworkSwitchAndFetch();
   }, [address]);
 
-  const fetchBalances = async (signer) => {
+  const fetchBalances = async () => {
     try {
-      const provider = signer.provider;
-      const balance = await signer.getBalance();
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const network = await provider.getNetwork();
+
+      setUserNetwork(network);
+
+      if (network.chainId !== appConfig.network.chainId) {
+        throw new Error(`Connected to wrong network: ${network.chainId}. Please connect to the ${appConfig.network.name} network.`);
+      }
+
+      const balance = await provider.getBalance(address);
       setGasBalance(ethers.utils.formatEther(balance));
 
-      const uoaContract = new ethers.Contract(appConfig.unitOfAccount.contract, appConfig.unitOfAccount.ABI, signer);
+      const uoaContract = new ethers.Contract(appConfig.unitOfAccount.contract, appConfig.unitOfAccount.ABI, provider);
       const uoaBalanceRaw = await uoaContract.balanceOf(address);
       setUoaBalance(ethers.utils.formatUnits(uoaBalanceRaw, appConfig.unitOfAccount.decimals));
     } catch (err) {
       console.error("Error fetching balances:", err);
       setError(`Error fetching balances: ${err.message}`);
+    }
+  };
+
+  const handleSendTransaction = async () => {
+    try {
+      setError(null);
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+
+      const uoaContract = new ethers.Contract(appConfig.unitOfAccount.contract, appConfig.unitOfAccount.ABI, signer);
+      const tx = await uoaContract.transfer(recipientAddress, ethers.utils.parseUnits(amountToSend, appConfig.unitOfAccount.decimals));
+      await tx.wait();
+      await fetchBalances();
+      alert("Transaction successful!");
+    } catch (err) {
+      console.error("Transaction failed:", err);
+      setError(`Transaction failed: ${err.message}`);
     }
   };
 
@@ -77,11 +136,12 @@ function WalletApp() {
             modalTitle="Select a Wallet"
           />
           {address && (
+            <button className="button is-danger" onClick={disconnect}>
+              Disconnect
+            </button>
+          )}
+          {address && (
             <>
-              <button className="button is-danger" onClick={disconnect}>
-                Disconnect
-              </button>
-
               {!loading ? (
                 <>
                   <p>Your {userNetwork ? userNetwork.name : 'Network'} Address: {address}</p>
@@ -126,12 +186,6 @@ function WalletApp() {
           )}
 
           {error && <p className="has-text-danger">{error}</p>}
-
-          {networkPrompt && (
-            <div className="notification is-warning">
-              <p>Please switch your network to {appConfig.network.chainName} in your wallet settings.</p>
-            </div>
-          )}
         </div>
       </div>
     </section>
