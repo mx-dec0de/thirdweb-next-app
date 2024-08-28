@@ -23,9 +23,8 @@ export default function HomePage() {
   );
 }
 
-async function switchToNetwork() {
+async function switchToNetwork(provider) {
   try {
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
     const network = await provider.getNetwork();
 
     console.log("Current network:", network.chainId); // Log current network
@@ -75,21 +74,35 @@ function WalletApp() {
 
   useEffect(() => {
     const handleNetworkSwitchAndFetch = async () => {
-      try {
-        if (address) {
-          setLoading(true);
+      let provider;
 
-          // Switch to the correct network before fetching balances
-          await switchToNetwork();
-
-          // Fetch balances after successful network switch
-          await fetchBalances();
+      // Check if window.ethereum is available (for mobile and desktop)
+      if (typeof window.ethereum !== 'undefined') {
+        provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+      } else {
+        // Use WalletConnect as a fallback if window.ethereum is not found
+        try {
+          provider = new ethers.providers.Web3Provider(await getWalletConnectProvider());
+        } catch (err) {
+          setError("No provider found. Please connect your wallet.");
+          return;
         }
-      } catch (err) {
-        console.error("Error during network switch or balance fetching:", err);
-        setError(`Error: ${err.message}`);
-      } finally {
-        setLoading(false);
+      }
+
+      if (provider) {
+        try {
+          if (address) {
+            setLoading(true);
+
+            await switchToNetwork(provider); // Ensure correct network
+            await fetchBalances(provider);   // Fetch balances using the provider
+          }
+        } catch (err) {
+          console.error("Error during network switch or balance fetching:", err);
+          setError(`Error: ${err.message}`);
+        } finally {
+          setLoading(false);
+        }
       }
     };
 
@@ -104,12 +117,11 @@ function WalletApp() {
 
   }, [address]);
 
-  const fetchBalances = async () => {
+  const fetchBalances = async (provider) => {
     try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
       const network = await provider.getNetwork();
-
+      
       setUserNetwork(network);
 
       // Ensure we're on the correct network
@@ -129,6 +141,15 @@ function WalletApp() {
     }
   };
 
+  const getWalletConnectProvider = async () => {
+    const WalletConnectProvider = (await import('@walletconnect/web3-provider')).default;
+    const provider = new WalletConnectProvider({
+      rpc: { [appConfig.chainId]: appConfig.network.rpcUrls[0] },
+    });
+    await provider.enable();  // This triggers the WalletConnect connection
+    return provider;
+  };
+
   const handleSendTransaction = async () => {
     try {
       setError(null);
@@ -138,7 +159,7 @@ function WalletApp() {
       const uoaContract = new ethers.Contract(appConfig.unitOfAccount.contract, appConfig.unitOfAccount.ABI, signer);
       const tx = await uoaContract.transfer(recipientAddress, ethers.utils.parseUnits(amountToSend, appConfig.unitOfAccount.decimals));
       await tx.wait();
-      await fetchBalances();
+      await fetchBalances(provider);
       alert("Transaction successful!");
     } catch (err) {
       console.error("Transaction failed:", err);
