@@ -26,31 +26,28 @@ export default function HomePage() {
 async function switchToNetwork(provider) {
   try {
     const network = await provider.getNetwork();
-
-    console.log("Current network:", network.chainId); // Log current network
+    console.log("Current network:", network.chainId);
 
     if (typeof window.ethereum !== 'undefined') {
-      // Switch to the desired network
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: appConfig.chainIdHexCode }],
       });
-      
-      const updatedNetwork = await provider.getNetwork(); // Fetch the updated network after switching
-      console.log("Switched to network:", updatedNetwork.chainId); // Log the updated chain ID
+
+      const updatedNetwork = await provider.getNetwork();
+      console.log("Switched to network:", updatedNetwork.chainId);
     } else {
       throw new Error("Ethereum provider not found");
     }
   } catch (switchError) {
     if (switchError.code === 4902) {
       try {
-        // Add the network if it doesn't exist
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [appConfig.network],
         });
-        
-        const updatedNetwork = await provider.getNetwork(); // Fetch the updated network after adding
+
+        const updatedNetwork = await provider.getNetwork();
         console.log("Network added and switched:", updatedNetwork.chainId);
       } catch (addError) {
         console.error("Failed to add the network:", addError);
@@ -76,15 +73,17 @@ function WalletApp() {
     const handleNetworkSwitchAndFetch = async () => {
       let provider;
 
-      // Check if window.ethereum is available (for mobile and desktop)
       if (typeof window.ethereum !== 'undefined') {
         provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
       } else {
-        // Use WalletConnect as a fallback if window.ethereum is not found
         try {
-          provider = new ethers.providers.Web3Provider(await getWalletConnectProvider());
+          provider = await getWalletConnectProvider();
+          if (!provider) {
+            setError("No provider found. Please connect your wallet.");
+            return;
+          }
         } catch (err) {
-          setError("No provider found. Please connect your wallet.");
+          setError("Failed to initialize WalletConnect. Please try again.");
           return;
         }
       }
@@ -93,7 +92,6 @@ function WalletApp() {
         try {
           if (address) {
             setLoading(true);
-
             await switchToNetwork(provider); // Ensure correct network
             await fetchBalances(provider);   // Fetch balances using the provider
           }
@@ -108,7 +106,6 @@ function WalletApp() {
 
     handleNetworkSwitchAndFetch();
 
-    // Reload the app if the chain changes unexpectedly
     if (window.ethereum) {
       window.ethereum.on('chainChanged', () => {
         window.location.reload();
@@ -121,10 +118,9 @@ function WalletApp() {
     try {
       const signer = provider.getSigner();
       const network = await provider.getNetwork();
-      
+
       setUserNetwork(network);
 
-      // Ensure we're on the correct network
       if (network.chainId !== parseInt(appConfig.chainIdHexCode, 16)) {
         throw new Error(`Connected to wrong network: ${network.chainId}. Please connect to the ${appConfig.network.name} network.`);
       }
@@ -142,12 +138,17 @@ function WalletApp() {
   };
 
   const getWalletConnectProvider = async () => {
-    const WalletConnectProvider = (await import('@walletconnect/web3-provider')).default;
-    const provider = new WalletConnectProvider({
-      rpc: { [appConfig.chainId]: appConfig.network.rpcUrls[0] },
-    });
-    await provider.enable();  // This triggers the WalletConnect connection
-    return provider;
+    try {
+      const WalletConnectProvider = (await import('@walletconnect/web3-provider')).default;
+      const provider = new WalletConnectProvider({
+        rpc: { [appConfig.chainId]: appConfig.network.rpcUrls[0] },
+      });
+      await provider.enable();  // Trigger WalletConnect
+      return new ethers.providers.Web3Provider(provider);
+    } catch (error) {
+      console.error("WalletConnect initialization failed:", error);
+      return null;
+    }
   };
 
   const handleSendTransaction = async () => {
