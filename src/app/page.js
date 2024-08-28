@@ -5,13 +5,10 @@ import { ThirdwebProvider, ConnectWallet, useAddress, useDisconnect } from "@thi
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { ethers } from 'ethers';
 import { appConfig } from '../config';
-import DialogComponent from '../DialogComponent'; // Import the dialog component
 
 const queryClient = new QueryClient();
 
 export default function HomePage() {
- 
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThirdwebProvider 
@@ -23,33 +20,44 @@ export default function HomePage() {
         
       </ThirdwebProvider>
     </QueryClientProvider>
-  ); 
+  );
 }
 
 async function switchToNetwork() {
   try {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const network = await provider.getNetwork();
+
+    console.log("Current network:", network.chainId); // Log current network
+
     if (typeof window.ethereum !== 'undefined') {
+      // Switch to the desired network
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: appConfig.chainIdHexCode }],
       });
-      console.log("Switched to " + appConfig.network.chainName);
+      
+      const updatedNetwork = await provider.getNetwork(); // Fetch the updated network after switching
+      console.log("Switched to network:", updatedNetwork.chainId); // Log the updated chain ID
     } else {
       throw new Error("Ethereum provider not found");
     }
   } catch (switchError) {
     if (switchError.code === 4902) {
       try {
+        // Add the network if it doesn't exist
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [appConfig.network],
         });
-        console.log(appConfig.network.chainName + " added and switched");
+        
+        const updatedNetwork = await provider.getNetwork(); // Fetch the updated network after adding
+        console.log("Network added and switched:", updatedNetwork.chainId);
       } catch (addError) {
-        console.error("Failed to add the network", addError);
+        console.error("Failed to add the network:", addError);
       }
     } else {
-      console.error("Failed to switch the network", switchError);
+      console.error("Failed to switch the network:", switchError);
     }
   }
 }
@@ -67,38 +75,52 @@ function WalletApp() {
 
   useEffect(() => {
     const handleNetworkSwitchAndFetch = async () => {
-      if (address) {
-        try {
+      try {
+        if (address) {
           setLoading(true);
+
+          // Switch to the correct network before fetching balances
           await switchToNetwork();
+
+          // Fetch balances after successful network switch
           await fetchBalances();
-        } catch (err) {
-          console.error("Error during network switch or balance fetching:", err);
-          setError(`Error: ${err.message}`);
-        } finally {
-          setLoading(false);
         }
+      } catch (err) {
+        console.error("Error during network switch or balance fetching:", err);
+        setError(`Error: ${err.message}`);
+      } finally {
+        setLoading(false);
       }
     };
 
     handleNetworkSwitchAndFetch();
+
+    // Reload the app if the chain changes unexpectedly
+    if (window.ethereum) {
+      window.ethereum.on('chainChanged', () => {
+        window.location.reload();
+      });
+    }
+
   }, [address]);
 
   const fetchBalances = async () => {
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
       const network = await provider.getNetwork();
 
       setUserNetwork(network);
 
-      if (network.chainId !== appConfig.network.chainId) {
+      // Ensure we're on the correct network
+      if (network.chainId !== parseInt(appConfig.chainIdHexCode, 16)) {
         throw new Error(`Connected to wrong network: ${network.chainId}. Please connect to the ${appConfig.network.name} network.`);
       }
 
-      const balance = await provider.getBalance(address);
+      const balance = await signer.getBalance();
       setGasBalance(ethers.utils.formatEther(balance));
 
-      const uoaContract = new ethers.Contract(appConfig.unitOfAccount.contract, appConfig.unitOfAccount.ABI, provider);
+      const uoaContract = new ethers.Contract(appConfig.unitOfAccount.contract, appConfig.unitOfAccount.ABI, signer);
       const uoaBalanceRaw = await uoaContract.balanceOf(address);
       setUoaBalance(ethers.utils.formatUnits(uoaBalanceRaw, appConfig.unitOfAccount.decimals));
     } catch (err) {
