@@ -25,8 +25,9 @@ export default function HomePage() {
   ); 
 }
 
-async function switchToNetwork(provider) {
+async function switchToNetwork(signer) {
   try {
+    const provider = signer.provider;
     if (provider) {
       await provider.send('wallet_switchEthereumChain', [
         { chainId: appConfig.chainIdHexCode }
@@ -62,30 +63,24 @@ function WalletApp() {
 
   useEffect(() => {
     const handleNetworkSwitchAndFetch = async () => {
-      let provider = null;
-      
-      // Ensure provider initialization on mobile
-      if (typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
-        provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
-      } else {
-        // Handle mobile browser (delayed initialization)
-        const providerCheck = setInterval(() => {
-          if (window.ethereum) {
-            provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
-            clearInterval(providerCheck);
-          }
-        }, 1000);
+      let provider;
+      let signer;
 
-        setTimeout(() => clearInterval(providerCheck), 10000); // Timeout after 10s if no provider is found
+      if (typeof window.ethereum !== 'undefined') {
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = provider.getSigner();
+      }
+
+      if (!provider || !signer) {
+        setError("Ethereum provider not found. Please connect your wallet.");
+        return;
       }
 
       try {
-        if (address && provider) {
+        if (address) {
           setLoading(true);
-          await switchToNetwork(provider); // Ensure network is correct
-          await fetchBalances(provider); // Fetch balances
-        } else {
-          setError("Ethereum provider not found. Please connect your wallet.");
+          await switchToNetwork(signer); // Ensure network is correct
+          await fetchBalances(signer); // Fetch balances using signer
         }
       } catch (err) {
         console.error("Error during network switch or balance fetching:", err);
@@ -99,9 +94,9 @@ function WalletApp() {
     handleNetworkSwitchAndFetch();
   }, [address]);
 
-  const fetchBalances = async (provider) => {
+  const fetchBalances = async (signer) => {
     try {
-      const signer = provider.getSigner();
+      const provider = signer.provider;
       const network = await provider.getNetwork();
 
       setUserNetwork(network);
@@ -125,13 +120,13 @@ function WalletApp() {
   const handleSendTransaction = async () => {
     try {
       setError(null);
-      const provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
 
       const uoaContract = new ethers.Contract(appConfig.unitOfAccount.contract, appConfig.unitOfAccount.ABI, signer);
       const tx = await uoaContract.transfer(recipientAddress, ethers.utils.parseUnits(amountToSend, appConfig.unitOfAccount.decimals));
       await tx.wait();
-      await fetchBalances(provider);
+      await fetchBalances(signer);
       alert("Transaction successful!");
     } catch (err) {
       console.error("Transaction failed:", err);
