@@ -23,7 +23,7 @@ export default function HomePage() {
   );
 }
 
-async function switchToNetwork(provider, setNetworkData) {
+async function switchToNetwork(provider) {
   try {
     const network = await provider.getNetwork();
     console.log("Current network:", network.chainId);
@@ -35,7 +35,7 @@ async function switchToNetwork(provider, setNetworkData) {
       });
 
       const updatedNetwork = await provider.getNetwork();
-      setNetworkData(updatedNetwork); // Store the full network data in state
+      console.log("Switched to network:", updatedNetwork.chainId);
     } else {
       throw new Error("Ethereum provider not found");
     }
@@ -48,7 +48,7 @@ async function switchToNetwork(provider, setNetworkData) {
         });
 
         const updatedNetwork = await provider.getNetwork();
-        setNetworkData(updatedNetwork); // Store the full network data in state
+        console.log("Network added and switched:", updatedNetwork.chainId);
       } catch (addError) {
         console.error("Failed to add the network:", addError);
       }
@@ -62,7 +62,7 @@ function WalletApp() {
   const [gasBalance, setGasBalance] = useState(null);
   const [uoaBalance, setUoaBalance] = useState(null);
   const [userNetwork, setUserNetwork] = useState(null);
-  const [networkData, setNetworkData] = useState(null); // State to store network data
+  const [blockHeight, setBlockHeight] = useState(null); // New state for block height
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amountToSend, setAmountToSend] = useState('');
   const [error, setError] = useState(null);
@@ -93,8 +93,11 @@ function WalletApp() {
         try {
           if (address) {
             setLoading(true);
-            await switchToNetwork(provider, setNetworkData); // Pass setNetworkData to update networkData state
+            await switchToNetwork(provider); // Ensure correct network
             await fetchBalances(provider);   // Fetch balances using the provider
+
+            const blockNumber = await provider.getBlockNumber(); // Fetch block height
+            setBlockHeight(blockNumber);
           }
         } catch (err) {
           console.error("Error during network switch or balance fetching:", err);
@@ -192,18 +195,12 @@ function WalletApp() {
                   <p>Your {userNetwork ? userNetwork.name : 'Network'} Address: {address}</p>
                   <p>{appConfig.network.nativeCurrency.name} Balance: {gasBalance !== null ? `${gasBalance} ${appConfig.network.nativeCurrency.name}` : "Loading..."}</p>
                   <p>{appConfig.unitOfAccount.name} Balance: {uoaBalance !== null ? `${uoaBalance} ${appConfig.unitOfAccount.name}` : "Loading..."}</p>
-                  <div>
-                    <h3>Network Data:</h3>
-                    {networkData ? (
-                      <ul>
-                        <li>Chain ID: {networkData.chainId}</li>
-                        <li>Network Name: {networkData.name}</li>
-                        <li>Block Height: {networkData._defaultProvider ? networkData._defaultProvider.blockHeight : 'N/A'}</li>
-                      </ul>
-                    ) : (
-                      <p>No network data available.</p>
-                    )}
-                  </div>
+                  <p>Network Data:</p>
+                  <ul>
+                    <li>Chain ID: {userNetwork?.chainId}</li>
+                    <li>Network Name: {userNetwork?.name}</li>
+                    <li>Block Height: {blockHeight !== null ? blockHeight : 'N/A'}</li> {/* Display block height */}
+                  </ul>
                 </>
               ) : (
                 <p>Loading balances...</p>
