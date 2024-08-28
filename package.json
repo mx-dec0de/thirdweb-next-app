@@ -9,12 +9,18 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@thirdweb-dev/chains": "^0.1.120",
+    "@thirdweb-dev/react": "^4.9.4",
+    "@walletconnect/modal": "^2.6.2",
+    "bulma": "^1.0.2",
+    "ethers": "^5.7.2",
+    "next": "14.2.6",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.7"
+    "react-query":"^3.39.3"
   },
   "devDependencies": {
     "eslint": "^8",
-    "eslint-config-next": "14.2.7"
+    "eslint-config-next": "14.2.6"
   }
 }
