@@ -10,8 +10,6 @@ import DialogComponent from '../DialogComponent'; // Import the dialog component
 const queryClient = new QueryClient();
 
 export default function HomePage() {
- 
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThirdwebProvider 
@@ -20,8 +18,8 @@ export default function HomePage() {
         clientId={appConfig.thirdWebClientId}>
         
         <WalletApp />
-        <DialogComponent /> {/* Include the DialogComponent */}
-        
+        <DialogComponent /> {/* Added Dialog Component */}
+
       </ThirdwebProvider>
     </QueryClientProvider>
   ); 
@@ -62,23 +60,23 @@ function WalletApp() {
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amountToSend, setAmountToSend] = useState('');
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
   const address = useAddress();
   const disconnect = useDisconnect();
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const handleNetworkSwitchAndFetch = async () => {
       if (address) {
         try {
           setLoading(true);
-          await switchToNetwork();
-          await fetchBalances();
+          await switchToNetwork(); // Attempt to switch network
+          await fetchBalances(); // Fetch balances after switching
         } catch (err) {
           console.error("Error during network switch or balance fetching:", err);
           setError(`Error: ${err.message}`);
         } finally {
           setLoading(false);
-          alert(appConfig.envCheck);
+          alert(appConfig.envCheck); // This alert checks environment variables
         }
       }
     };
@@ -138,12 +136,11 @@ function WalletApp() {
             modalTitle="Select a Wallet"
           />
           {address && (
-            <button className="button is-danger" onClick={disconnect}>
-              Disconnect
-            </button>
-          )}
-          {address && (
             <>
+              <button className="button is-danger" onClick={disconnect}>
+                Disconnect
+              </button>
+
               {!loading ? (
                 <>
                   <p>Your {userNetwork ? userNetwork.name : 'Network'} Address: {address}</p>
